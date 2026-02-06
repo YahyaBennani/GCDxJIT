@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GDC x JIT CTF</title>
+
+<style>
+/* ===================== THEME ===================== */
+:root {
+  --green: #00ff88;
+  --green-dim: rgba(0,255,136,.6);
+  --green-glow: 0 0 25px rgba(0,255,136,.8);
+  --bg: #000;
+  --panel: rgba(0,0,0,.85);
+}
+
+/* ===================== RESET ===================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--green);
+  font-family: "Courier New", monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ===================== SCANLINES ===================== */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0,255,136,.04),
+    rgba(0,255,136,.04) 1px,
+    transparent 2px,
+    transparent 4px
+  );
+}
+
+/* ===================== NOISE ===================== */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(rgba(0,255,136,.06) 1px, transparent 1px);
+  background-size: 3px 3px;
+  opacity: .15;
+  pointer-events: none;
+}
+
+/* ===================== CONTAINER ===================== */
+.container {
+  max-width: 1000px;
+  margin: auto;
+  padding: 40px 20px;
+}
+
+/* ===================== PANELS ===================== */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--green-dim);
+  padding: 28px;
+  margin-bottom: 28px;
+  box-shadow: 0 0 30px rgba(0,255,136,.2);
+  position: relative;
+}
+
+.panel::before {
+  content: ">> SYSTEM PANEL";
+  position: absolute;
+  top: -10px;
+  left: 12px;
+  font-size: 10px;
+  background: var(--bg);
+  padding: 0 6px;
+}
+
+/* ===================== HEADER ===================== */
+.badge {
+  display: inline-block;
+  border: 1px solid var(--green);
+  padding: 6px 10px;
+  margin-bottom: 14px;
+  font-weight: bold;
+}
+
+.title {
+  font-size: 48px;
+  text-shadow: var(--green-glow);
+}
+
+.status {
+  font-size: 12px;
+  opacity: .8;
+}
+
+/* ===================== COUNTER ===================== */
+.counter {
+  font-size: 110px;
+  text-align: center;
+  text-shadow: 0 0 40px rgba(0,255,136,1);
+}
+
+.progress-shell {
+  border: 1px solid var(--green);
+  height: 14px;
+  max-width: 300px;
+  margin: 18px auto;
+}
+
+.progress {
+  height: 100%;
+  background: linear-gradient(90deg, #00ff88, #00cc66);
+  width: 0%;
+}
+
+.meta {
+  text-align: center;
+  font-size: 12px;
+}
+
+/* ===================== TIMELINE ===================== */
+.event {
+  border-left: 3px solid var(--green-dim);
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.event.active {
+  border-color: var(--green);
+  box-shadow: inset 0 0 20px rgba(0,255,136,.3);
+}
+
+.event::before {
+  content: "●";
+  position: absolute;
+  left: -10px;
+  top: 18px;
+  color: var(--green);
+}
+
+.sticker {
+  position: absolute;
+  right: 12px;
+  top: -10px;
+  font-size: 10px;
+  background: var(--green);
+  color: #000;
+  padding: 2px 8px;
+  font-weight: bold;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  50% { opacity: .4; }
+}
+
+/* ===================== GLITCH (RARE) ===================== */
+.glitch {
+  animation: glitch 0.12s steps(2) infinite alternate;
+}
+/*7mf[h8kE!/3&#JJ85;'61g`(12,7LJEc3XLF@T/,?XtrKFo*/
+@keyframes glitch {
+  from { transform: translate(0); }
+  to { transform: translate(-2px, 1px); }
+}
+
+/* ===================== RESPONSIVE ===================== */
+@media (max-width: 768px) {
+  .title { font-size: 34px; }
+  .counter { font-size: 70px; }
+}
+
+/* ===================== ACCESSIBILITY ===================== */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="panel">
+    <div class="badge">root@GCD</div>
+    <h1 class="title glitch">GDC x JIT CTF</h1>
+    <p class="status">[ SYSTEM_STATUS: ACTIVE ] [ LIVE_FEED: ENABLED ]</p>
+  </div>
+
+  <!-- COUNTER -->
+  <div class="panel">
+    <p>REGISTERED PARTICIPANTS</p>
+    <div class="counter" id="counter">0</div>
+
+    <div class="progress-shell">
+      <div class="progress" id="progress"></div>
+    </div>
+
+    <div class="meta">CAPACITY: 100 — <span id="percent">0</span>%</div>
+  </div>
+
+  <!-- TIMELINE -->
+  <div id="timeline"></div>
+
+</div>
+
+<script>
+/* ===================== DATA ===================== */
+const MAX = 100;
+
+const events = [
+  ["2026-02-07 20:00", "CHECK IN — Accueil des participants"],
+  ["2026-02-07 21:00", "START — Début du CTF"],
+  ["2026-02-08 01:00", "PAUSE — Dinner"],
+  ["2026-02-08 09:00", "END — Fin du CTF"],
+  ["2026-02-08 09:10", "PAUSE Café — Networking"],
+  ["2026-02-08 11:00", "ANNONCE — Équipes gagnantes"],
+  ["2026-02-08 11:30", "CEREMONIE — Clôture"]
+];
+
+/* ===================== BUILD TIMELINE ===================== */
+const timeline = document.getElementById("timeline");
+
+events.forEach(([time, text]) => {
+  const e = document.createElement("div");
+  e.className = "event";
+  e.dataset.time = time;
+  e.textContent = `> [${time}] ${text}`;
+  timeline.appendChild(e);
+});
+
+/* ===================== ACTIVE EVENT ===================== */
+function updateActiveEvent() {
+  const now = Date.now();
+  let active = null;
+
+  document.querySelectorAll(".event").forEach(e => {
+    e.classList.remove("active");
+    e.querySelector(".sticker")?.remove();
+    if (new Date(e.dataset.time).getTime() <= now) active = e;
+  });
+
+  if (active) {
+    active.classList.add("active");
+    active.insertAdjacentHTML("beforeend",
+      `<div class="sticker">HAPPENING NOW_</div>`
+    );
+  }
+}
+
+updateActiveEvent();
+setInterval(updateActiveEvent, 60 * 1000);
+
+/* ===================== COUNTER ===================== */
+const counter = document.getElementById("counter");
+const progress = document.getElementById("progress");
+const percent = document.getElementById("percent");
+
+const duration = 2500;
+const start = Date.now();
+/*GCDxJIT{3lach_tat9lb_s1r_fhalk}*/
+(function animate(){
+  const p = Math.min((Date.now() - start) / duration, 1);
+  const v = Math.floor(p * MAX);
+  counter.textContent = v;
+  progress.style.width = (v / MAX * 100) + "%";
+  percent.textContent = Math.round(v / MAX * 100);
+  if (p < 1) requestAnimationFrame(animate);
+})();
+</script>
+
+</body>
+</html>
